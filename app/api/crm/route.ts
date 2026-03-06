@@ -1,6 +1,12 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { PolicyLead, PolicyIssuance, Reminder } from "@prisma/client";
+
+type LeadWithRelations = PolicyLead & {
+  issuances: PolicyIssuance[];
+  reminders: Reminder[];
+};
 
 export async function GET() {
   try {
@@ -9,7 +15,6 @@ export async function GET() {
 
     const user = await db.user.findUnique({ where: { clerkId } });
     if (!user) return Response.json({ success: true, data: { leads: [], stats: {} } });
-    
 
     const today = new Date();
     const in30Days = new Date(today);
@@ -17,7 +22,7 @@ export async function GET() {
     const in7Days = new Date(today);
     in7Days.setDate(today.getDate() + 7);
 
-    const leads = await db.policyLead.findMany({
+    const leads: LeadWithRelations[] = await db.policyLead.findMany({
       where: { agentId: user.id },
       include: {
         issuances: true,
@@ -26,7 +31,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    const leadsWithFlags = leads.map((lead) => {
+    const leadsWithFlags = leads.map((lead: LeadWithRelations) => {
       const isBirthdayToday =
         lead.dateOfBirth !== null &&
         lead.dateOfBirth.getDate() === today.getDate() &&
@@ -39,14 +44,14 @@ export async function GET() {
           return bday >= today && bday <= in7Days;
         })();
 
-      // Premium due = issuances where nextPremiumDue is within next 30 days
       const premiumsDue = lead.issuances.filter(
-        (i) => i.nextPremiumDue && new Date(i.nextPremiumDue) >= today && new Date(i.nextPremiumDue) <= in30Days
+        (i: PolicyIssuance) => i.nextPremiumDue && new Date(i.nextPremiumDue) >= today && new Date(i.nextPremiumDue) <= in30Days
       );
 
       const premiumsDueUrgent = lead.issuances.filter(
-        (i) => i.nextPremiumDue && new Date(i.nextPremiumDue) >= today && new Date(i.nextPremiumDue) <= in7Days
+        (i: PolicyIssuance) => i.nextPremiumDue && new Date(i.nextPremiumDue) >= today && new Date(i.nextPremiumDue) <= in7Days
       );
+
       return {
         ...lead,
         isBirthdayToday,
@@ -63,8 +68,8 @@ export async function GET() {
       birthdaysThisWeek: leadsWithFlags.filter((l) => l.isBirthdayThisWeek).length,
       premiumsDueCount: leadsWithFlags.filter((l) => l.hasPremiumDue).length,
       premiumsDueUrgentCount: leadsWithFlags.filter((l) => l.hasPremiumDueUrgent).length,
-      policiesIssued: leads.filter((l) => l.status === "POLICY_ISSUED").length,
-      activeReminders: leads.reduce((acc, l) => acc + l.reminders.length, 0),
+      policiesIssued: leads.filter((l: LeadWithRelations) => l.status === "POLICY_ISSUED").length,
+      activeReminders: leads.reduce((acc: number, l: LeadWithRelations) => acc + l.reminders.length, 0),
     };
 
     return Response.json({ success: true, data: { leads: leadsWithFlags, stats } });
@@ -72,9 +77,7 @@ export async function GET() {
     console.error("CRM fetch error:", error);
     return Response.json({ success: false, error: "Failed to fetch CRM data" }, { status: 500 });
   }
-  
 }
-
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -83,7 +86,6 @@ export async function PATCH(req: NextRequest) {
 
     const { leadId, ...updates } = await req.json();
     if (!leadId) return Response.json({ success: false, error: "leadId required" }, { status: 400 });
-
 
     const lead = await db.policyLead.update({
       where: { id: leadId },
