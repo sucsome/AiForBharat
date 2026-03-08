@@ -1,6 +1,3 @@
-// Drop-in replacement for the birthdays section inside crm/page.tsx
-// Replace the entire {activePage === "birthdays" && (...)} block with this component
-
 import { useState, useEffect } from "react";
 import { Phone, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -27,17 +24,22 @@ function formatDOB(dob: string) {
   return new Date(dob).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
+const F = {
+  serif: "'Instrument Serif', serif",
+  sans:  "'DM Sans', sans-serif",
+};
+
 export function BirthdaySection() {
-  const [birthdays, setBirthdays] = useState<BirthdayEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [birthdays, setBirthdays]   = useState<BirthdayEntry[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<"today" | "week" | "upcoming">("today");
+  const [tab, setTab]               = useState<"today" | "week" | "upcoming">("today");
 
   useEffect(() => { fetchBirthdays(); }, []);
 
   const fetchBirthdays = async () => {
     try {
-      const res = await fetch("/api/birthdays");
+      const res  = await fetch("/api/birthdays");
       const json = await res.json();
       if (json.success) setBirthdays(json.data);
     } catch { console.error("Failed to fetch birthdays"); }
@@ -61,146 +63,267 @@ export function BirthdaySection() {
     setBirthdays(prev => prev.map(b => b.id === id ? { ...b, wishSent: true } : b));
   };
 
-  const todayList = birthdays.filter(b => b.daysUntil === 0);
-  const weekList = birthdays.filter(b => b.daysUntil > 0 && b.daysUntil <= 7);
+  const todayList    = birthdays.filter(b => b.daysUntil === 0);
+  const weekList     = birthdays.filter(b => b.daysUntil > 0 && b.daysUntil <= 7);
   const upcomingList = birthdays.filter(b => b.daysUntil > 7);
-
-  const activeList = tab === "today" ? todayList : tab === "week" ? weekList : upcomingList;
+  const activeList   = tab === "today" ? todayList : tab === "week" ? weekList : upcomingList;
 
   const lastRefreshed = birthdays[0]?.refreshedAt
     ? new Date(birthdays[0].refreshedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
     : null;
 
   return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Stat cards ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         {[
-          { label: "Birthdays Today", value: todayList.length, sub: "Action needed", color: "text-pink-600" },
-          { label: "This Week", value: weekList.length, sub: "Upcoming", color: "text-orange-500" },
-          { label: "Wishes Sent", value: birthdays.filter(b => b.wishSent).length, sub: "Today", color: "text-emerald-600" },
+          { label: "Birthdays Today",  value: todayList.length,                        accent: "#f43f5e", lightBg: "#fff1f2" },
+          { label: "This Week",        value: weekList.length,                          accent: "#f97316", lightBg: "#fff7ed" },
+          { label: "Wishes Sent",      value: birthdays.filter(b => b.wishSent).length, accent: "#059669", lightBg: "#d1fae5" },
         ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-sm font-medium text-slate-700 mt-1">{s.label}</p>
-            <p className="text-xs text-slate-400">{s.sub}</p>
+          <div key={s.label} style={{
+            backgroundColor: "#fff",
+            borderRadius: 16,
+            border: "1px solid rgba(0,0,0,0.06)",
+            padding: "20px 22px",
+            overflow: "hidden",
+            position: "relative",
+          }}>
+            {/* accent dot */}
+            <div style={{
+              position: "absolute", top: 18, right: 18,
+              width: 8, height: 8, borderRadius: "50%",
+              backgroundColor: s.accent, opacity: 0.5,
+            }} />
+            <p style={{
+              fontFamily: F.serif, fontWeight: 400, fontSize: 40,
+              letterSpacing: "-0.03em", color: s.accent, lineHeight: 1, margin: 0,
+            }}>{s.value}</p>
+            <p style={{
+              fontFamily: F.sans, fontWeight: 400, fontSize: 13,
+              color: "#0c1a12", marginTop: 6, marginBottom: 0,
+            }}>{s.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Tabs + Refresh */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+      {/* ── Tabs + Refresh ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6 }}>
           {[
-            { key: "today", label: `Today (${todayList.length})` },
-            { key: "week", label: `This Week (${weekList.length})` },
+            { key: "today",    label: `Today (${todayList.length})` },
+            { key: "week",     label: `This Week (${weekList.length})` },
             { key: "upcoming", label: `Upcoming (${upcomingList.length})` },
           ].map(t => (
-            <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                tab === t.key ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-              }`}>
-              {t.label}
-            </button>
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key as typeof tab)}
+              style={{
+                fontFamily:      F.sans,
+                fontWeight:      400,
+                fontSize:        13,
+                padding:         "7px 16px",
+                borderRadius:    999,
+                border:          tab === t.key ? "none" : "1px solid rgba(0,0,0,0.08)",
+                backgroundColor: tab === t.key ? "#0c1a12" : "#fff",
+                color:           tab === t.key ? "#fff" : "#64748b",
+                cursor:          "pointer",
+                transition:      "all 0.15s ease",
+              }}
+            >{t.label}</button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          {lastRefreshed && <p className="text-xs text-slate-400">Refreshed {lastRefreshed}</p>}
-          <button onClick={refresh} disabled={refreshing}
-            className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-2 rounded-xl transition-colors">
-            {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {lastRefreshed && (
+            <span style={{ fontFamily: F.sans, fontWeight: 300, fontSize: 12, color: "#94a3b8" }}>
+              Refreshed {lastRefreshed}
+            </span>
+          )}
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            style={{
+              display:         "inline-flex", alignItems: "center", gap: 6,
+              fontFamily:      F.sans, fontWeight: 400, fontSize: 12,
+              backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.08)",
+              color:           "#64748b", padding: "7px 14px", borderRadius: 999,
+              cursor:          "pointer", transition: "background 0.15s ease",
+            }}
+          >
+            {refreshing
+              ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+              : <RefreshCw size={13} />}
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table / empty / loading ── */}
       {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-8 flex justify-center">
-          <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+        <div style={{
+          backgroundColor: "#fff", borderRadius: 16,
+          border: "1px solid rgba(0,0,0,0.06)", padding: 48,
+          display: "flex", justifyContent: "center",
+        }}>
+          <Loader2 size={20} color="#059669" style={{ animation: "spin 1s linear infinite" }} />
         </div>
+
       ) : activeList.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center border border-slate-100">
-          <p className="text-3xl mb-2">🎂</p>
-          <p className="text-slate-500">No birthdays {tab === "today" ? "today" : tab === "week" ? "this week" : "upcoming"}</p>
+        <div style={{
+          backgroundColor: "#fff", borderRadius: 16,
+          border: "1px solid rgba(0,0,0,0.06)", padding: "48px 24px",
+          textAlign: "center",
+        }}>
+          <p style={{ fontSize: 32, margin: "0 0 10px" }}>🎂</p>
+          <p style={{ fontFamily: F.sans, fontWeight: 300, fontSize: 14, color: "#94a3b8", margin: 0 }}>
+            No birthdays {tab === "today" ? "today" : tab === "week" ? "this week" : "upcoming"}
+          </p>
         </div>
+
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-6 gap-4 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-            <div className="col-span-2">Customer</div>
-            <div>Date of Birth</div>
-            <div>Policy</div>
-            <div>Days Until</div>
-            <div>Action</div>
+        <div style={{
+          backgroundColor: "#fff", borderRadius: 16,
+          border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden",
+        }}>
+          {/* header row */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 1fr 1.2fr",
+            gap: 12, padding: "12px 20px",
+            backgroundColor: "#f8faf9", borderBottom: "1px solid rgba(0,0,0,0.05)",
+          }}>
+            {["Customer", "Date of Birth", "Policy", "Days Until", "Action"].map(h => (
+              <span key={h} style={{
+                fontFamily: F.sans, fontWeight: 500, fontSize: 11,
+                letterSpacing: "0.12em", textTransform: "uppercase", color: "#94a3b8",
+              }}>{h}</span>
+            ))}
           </div>
 
-          {/* Table Rows */}
-          <div className="divide-y divide-slate-50">
-            {activeList.map(b => (
-              <div key={b.id} className={`grid grid-cols-6 gap-4 px-4 py-3 items-center hover:bg-slate-50 transition-colors ${b.wishSent ? "opacity-60" : ""}`}>
+          {/* rows */}
+          <div>
+            {activeList.map((b, i) => (
+              <div
+                key={b.id}
+                style={{
+                  display:       "grid",
+                  gridTemplateColumns: "2fr 1fr 1.2fr 1fr 1.2fr",
+                  gap:           12,
+                  padding:       "14px 20px",
+                  alignItems:    "center",
+                  borderTop:     i === 0 ? "none" : "1px solid rgba(0,0,0,0.04)",
+                  opacity:       b.wishSent ? 0.55 : 1,
+                  transition:    "background 0.12s ease",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#f8faf9")}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+              >
                 {/* Name */}
-                <div className="col-span-2 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center shrink-0">
-                    <span className="text-pink-700 font-bold text-xs">{b.name[0]}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: "50%",
+                    backgroundColor: "#fff1f2", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ fontFamily: F.serif, fontSize: 14, color: "#f43f5e" }}>
+                      {b.name[0]}
+                    </span>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 flex items-center gap-1">
+                    <p style={{
+                      fontFamily: F.sans, fontWeight: 500, fontSize: 13,
+                      color: "#0c1a12", margin: 0,
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}>
                       {b.name}
                       {b.isToday && <span>🎂</span>}
-                      {b.wishSent && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                      {b.wishSent && <CheckCircle2 size={13} color="#059669" />}
                     </p>
-                    {b.phone && <p className="text-xs text-slate-400">{b.phone}</p>}
+                    {b.phone && (
+                      <p style={{ fontFamily: F.sans, fontWeight: 300, fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                        {b.phone}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 {/* DOB */}
                 <div>
-                  <p className="text-sm text-slate-700">{formatDOB(b.dateOfBirth)}</p>
-                  <p className="text-xs text-slate-400">Turning {getAge(b.dateOfBirth)}</p>
+                  <p style={{ fontFamily: F.sans, fontWeight: 400, fontSize: 13, color: "#0c1a12", margin: 0 }}>
+                    {formatDOB(b.dateOfBirth)}
+                  </p>
+                  <p style={{ fontFamily: F.sans, fontWeight: 300, fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                    Turning {getAge(b.dateOfBirth)}
+                  </p>
                 </div>
 
                 {/* Policy */}
                 <div>
                   {b.lead.issuances.length > 0 ? (
-                    <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg">
+                    <span style={{
+                      fontFamily: F.sans, fontWeight: 400, fontSize: 11,
+                      backgroundColor: "#d1fae5", color: "#059669",
+                      padding: "4px 10px", borderRadius: 999,
+                    }}>
                       {b.lead.issuances[0].policyName.split(" ").slice(0, 3).join(" ")}
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400">No policy</span>
+                    <span style={{ fontFamily: F.sans, fontWeight: 300, fontSize: 12, color: "#94a3b8" }}>
+                      No policy
+                    </span>
                   )}
                 </div>
 
-                {/* Days Until */}
+                {/* Days until */}
                 <div>
                   {b.daysUntil === 0 ? (
-                    <span className="text-xs font-bold bg-pink-100 text-pink-600 px-2 py-1 rounded-full">Today! 🎉</span>
+                    <span style={{
+                      fontFamily: F.sans, fontWeight: 500, fontSize: 11,
+                      backgroundColor: "#fff1f2", color: "#f43f5e",
+                      padding: "4px 10px", borderRadius: 999,
+                    }}>Today 🎉</span>
                   ) : (
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      b.daysUntil <= 7 ? "bg-orange-50 text-orange-600" : "bg-blue-50 text-blue-600"
-                    }`}>
-                      {b.daysUntil} days
-                    </span>
+                    <span style={{
+                      fontFamily: F.sans, fontWeight: 400, fontSize: 11,
+                      backgroundColor: b.daysUntil <= 7 ? "#fff7ed" : "#f0fdf4",
+                      color:           b.daysUntil <= 7 ? "#f97316" : "#059669",
+                      padding: "4px 10px", borderRadius: 999,
+                    }}>{b.daysUntil} days</span>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1.5">
+                <div style={{ display: "flex", gap: 6 }}>
                   <button
                     onClick={() => markWishSent(b.id)}
                     disabled={b.wishSent}
-                    className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors ${
-                      b.wishSent
-                        ? "bg-slate-100 text-slate-400 cursor-default"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                    }`}
+                    style={{
+                      fontFamily:      F.sans, fontWeight: 400, fontSize: 12,
+                      padding:         "6px 12px", borderRadius: 999, border: "none",
+                      backgroundColor: b.wishSent ? "rgba(0,0,0,0.05)" : "#0c1a12",
+                      color:           b.wishSent ? "#94a3b8" : "#fff",
+                      cursor:          b.wishSent ? "default" : "pointer",
+                      transition:      "background 0.15s ease",
+                    }}
                   >
                     {b.wishSent ? "Sent ✓" : "💬 Wish"}
                   </button>
+
                   {b.phone && (
-                    <a href={`tel:${b.phone}`}
-                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium border border-slate-200 hover:bg-slate-50 text-slate-600 flex items-center gap-1 transition-colors">
-                      <Phone className="w-3 h-3" />
+                    <a
+                      href={`tel:${b.phone}`}
+                      style={{
+                        display:         "inline-flex", alignItems: "center",
+                        padding:         "6px 10px", borderRadius: 999,
+                        border:          "1px solid rgba(0,0,0,0.08)",
+                        color:           "#64748b", textDecoration: "none",
+                        transition:      "background 0.15s ease",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#f8faf9")}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      <Phone size={12} />
                     </a>
                   )}
                 </div>

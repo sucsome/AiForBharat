@@ -5,126 +5,134 @@ import { NextRequest } from "next/server";
 
 const bedrockClient = new BedrockRuntimeClient({
   region: process.env.AWS_REGION!,
-  token: {
-    token: process.env.AWS_BEARER_TOKEN_BEDROCK!,
-  },
+  token: { token: process.env.AWS_BEARER_TOKEN_BEDROCK! },
 });
 
 const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
 const index = pc.Index(process.env.PINECONE_INDEX!);
 
-const SYSTEM_PROMPT = `You are an AI insurance assistant for rural India, helping field agents recommend the right insurance policies to households.
+const SYSTEM_PROMPT = `You are an AI insurance assistant for rural India, helping field agents recommend insurance policies to low-income households.
 
-When an agent describes a household (income, family size, occupation, location, risks), you:
-1. Briefly analyze their needs in 1-2 sentences
-2. Recommend 2-3 specific insurance schemes that fit them — prioritize details from the policy documents provided in context
-3. For each policy return structured data
+You have access to real insurance policy documents. Use them to give accurate, specific answers.
 
-Always respond in this exact JSON format:
-{
-  "analysis": "Brief analysis of household needs",
-  "policies": [
-    {
-      "name": "Policy name",
-      "provider": "Provider name",
-      "premium": "Premium amount",
-      "coverage": "Coverage amount",
-      "tag": "Health/Crop/Life/Accident"
-    }
-  ]
+STRICT RULES:
+- Always respond with valid JSON only. Zero plain text outside JSON.
+- Never add markdown, code blocks, or extra explanation.
+
+RULE 1 - RECOMMENDATION MODE:
+Triggered when agent describes a household (income, family size, occupation, location, needs).
+- ALWAYS recommend exactly 3 policies
+- Use real policy names and figures from the provided documents
+- Respond ONLY with:
+{"type":"recommendation","analysis":"2 sentence analysis of household needs","policies":[{"name":"Exact policy name from documents","provider":"Provider name","premium":"₹X/month","coverage":"₹X lakh","tag":"Health/Crop/Life/Accident"},{"name":"...","provider":"...","premium":"...","coverage":"...","tag":"..."},{"name":"...","provider":"...","premium":"...","coverage":"...","tag":"..."}]}
+
+RULE 2 - CONVERSATION MODE:
+Triggered for follow-up questions, policy details, comparisons, greetings, anything else.
+- Answer using specific details from the provided policy documents
+- Give concrete numbers, facts, eligibility criteria from the documents
+- Respond ONLY with:
+{"type":"message","content":"Specific, detailed answer using facts from the policy documents"}`;
+
+// ← NEW: history message type
+interface HistoryMessage {
+  role: "agent" | "ai";
+  content: string;
 }
-
-If policy documents are provided in the context, use the actual premium and coverage figures from them.
-Also consider real Indian government schemes like:
-- Ayushman Bharat (health)
-- PM Fasal Bima Yojana (crop)
-- PM Jeevan Jyoti Bima Yojana (life)
-- PM Suraksha Bima Yojana (accident)
-- RSBY (health for BPL families)
-
-Only respond with valid JSON, no extra text.`;
-
-import { DenseEmbedding } from "@pinecone-database/pinecone/dist/pinecone-generated-ts-fetch/inference/models/DenseEmbedding";
 
 async function retrieveContext(message: string): Promise<string> {
   try {
-    const embeddings = await pc.inference.embed({
-      model: "llama-text-embed-v2",
-      inputs: [message],
-      parameters: { input_type: "query", truncate: "END" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results = await (index as any).searchRecords({
+      query: { topK: 8, inputs: { text: message } },
+      fields: ["text", "source"],
     });
 
-    const dense = embeddings.data[0] as unknown as DenseEmbedding;
-    const vector = dense.values;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hits = results?.result?.hits as any[];
+    if (!hits || hits.length === 0) return "";
 
-    const results = await index.query({
-      vector,
-      topK: 5,
-      includeMetadata: true,
-    });
+    console.log("Retrieved", hits.length, "chunks — sources:", hits.map((h: any) => h.fields?.source));
 
-    if (!results.matches || results.matches.length === 0) return "";
-
-    return results.matches
-      .map((m) => `[Source: ${m.metadata?.source}]\n${m.metadata?.text}`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return hits
+      .map((h: any) => `[Source: ${h.fields?.source}]\n${h.fields?.text}`)
       .join("\n\n---\n\n");
   } catch (err) {
-    console.warn("Pinecone retrieval failed:", err);
+    console.error("Pinecone retrieval error:", err);
     return "";
   }
 }
-async function callBedrock(message: string): Promise<string> {
+
+// ← CHANGED: accepts history, spreads it before the current message
+async function callBedrock(message: string, history: HistoryMessage[]): Promise<string> {
   const command = new ConverseCommand({
     modelId: process.env.BEDROCK_MODEL_ID!,
     system: [{ text: SYSTEM_PROMPT }],
-    messages: [{ role: "user", content: [{ text: message }] }],
-    inferenceConfig: { maxTokens: 1024, temperature: 0.7 },
+    messages: [
+      ...history.slice(-20).map((m) => ({
+        role: (m.role === "agent" ? "user" : "assistant") as "user" | "assistant",
+        content: [{ text: m.content }],
+      })),
+      { role: "user", content: [{ text: message }] },
+    ],
+    inferenceConfig: { maxTokens: 1500, temperature: 0.2 },
   });
   const response = await bedrockClient.send(command);
   return response.output?.message?.content?.[0]?.text ?? "{}";
 }
 
-async function callGroq(message: string): Promise<string> {
+// ← CHANGED: accepts history, spreads it before the current message
+async function callGroq(message: string, history: HistoryMessage[]): Promise<string> {
   const response = await groqClient.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
+      ...history.slice(-20).map((m) => ({
+        role: (m.role === "agent" ? "user" : "assistant") as "user" | "assistant",
+        content: m.content,
+      })),
       { role: "user", content: message },
     ],
-    max_tokens: 1024,
-    temperature: 0.7,
+    max_tokens: 1500,
+    temperature: 0.2,
   });
   return response.choices[0]?.message?.content ?? "{}";
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { message } = await req.json();
+    // ← CHANGED: destructure history (defaults to [] so nothing breaks if not sent)
+    const { message, history = [] } = await req.json() as { message: string; history: HistoryMessage[] };
 
-    // Step 1: Retrieve relevant policy chunks from Pinecone
     const context = await retrieveContext(message);
-
-    // Step 2: Augment the user message with retrieved context
     const augmentedMessage = context
-      ? `Relevant policy documents:\n\n${context}\n\n---\n\nAgent's query: ${message}`
+      ? `POLICY DOCUMENTS (use these for accurate info):\n\n${context}\n\n---\n\nAgent message: ${message}`
       : message;
 
-    // Step 3: Generate response using Bedrock (with Groq fallback)
     let text: string;
     try {
-      text = await callBedrock(augmentedMessage);
+      text = await callBedrock(augmentedMessage, history);
       console.log("Used Bedrock");
-    } catch (bedrockError) {
-      console.warn("Bedrock failed, falling back to Groq:", bedrockError);
-      text = await callGroq(augmentedMessage);
+    } catch {
+      text = await callGroq(augmentedMessage, history);
       console.log("Used Groq fallback");
     }
 
-    // Strip markdown code fences if model wraps response in ```json
     const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+
+    let parsed: { type: string; analysis?: string; policies?: unknown[]; content?: string };
+    try {
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = { type: "message", content: clean };
+    }
+
+    if (parsed.type === "recommendation" && Array.isArray(parsed.policies)) {
+      if (parsed.policies.length < 2) {
+        parsed = { type: "message", content: parsed.analysis ?? "Here are some policy suggestions based on the household profile." };
+      }
+    }
 
     return Response.json({ success: true, data: parsed });
   } catch (error) {

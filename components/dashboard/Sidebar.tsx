@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
-import { MessageSquare, Plus, Search, X, Loader2, Trash2, MoreVertical } from "lucide-react";
+import { Plus, Search, X, Loader2, Trash2, MoreVertical, MessageSquare } from "lucide-react";
 import Link from "next/link";
 
 interface Lead {
@@ -19,6 +19,39 @@ interface SidebarProps {
   activeLead?: Lead | null;
 }
 
+// ── Tiny avatar with initials ────────────────────────────────────────────────
+function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+  const initials = name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  // deterministic hue from name
+  const hue = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2.8,
+        background: `hsl(${hue}, 38%, 88%)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        fontFamily: "'DM Sans', sans-serif",
+        fontWeight: 500,
+        fontSize: size * 0.36,
+        color: `hsl(${hue}, 45%, 32%)`,
+        letterSpacing: "0.02em",
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
 export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -30,16 +63,12 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchLeads();
-  }, []);
+  useEffect(() => { fetchLeads(); }, []);
 
-  // Close menu on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
         setMenuOpenId(null);
-      }
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -50,23 +79,21 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
       const res = await fetch("/api/leads");
       const json = await res.json();
       if (json.success) {
-        const mapped = json.data.map((l: any) => ({
-          id: l.id,
-          householdName: l.householdName,
-          lastMessage: l.notes ?? "New conversation",
-          time: new Date(l.createdAt).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          unread: 0,
-        }));
-        setLeads(mapped);
+        setLeads(
+          json.data.map((l: any) => ({
+            id: l.id,
+            householdName: l.householdName,
+            lastMessage: l.notes ?? "New conversation",
+            time: new Date(l.createdAt).toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            unread: 0,
+          }))
+        );
       }
-    } catch {
-      console.error("Failed to fetch leads");
-    } finally {
-      setLoading(false);
-    }
+    } catch { console.error("Failed to fetch leads"); }
+    finally { setLoading(false); }
   };
 
   const handleCreate = async () => {
@@ -87,16 +114,11 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
           time: "Now",
           unread: 0,
         };
-        setLeads((prev) => [newLead, ...prev]);
+        setLeads((p) => [newLead, ...p]);
         onSelectLead?.(newLead);
       }
-    } catch {
-      console.error("Failed to create lead");
-    } finally {
-      setHouseholdName("");
-      setShowModal(false);
-      setCreating(false);
-    }
+    } catch { console.error("Failed to create lead"); }
+    finally { setHouseholdName(""); setShowModal(false); setCreating(false); }
   };
 
   const handleDelete = async (lead: Lead) => {
@@ -106,123 +128,357 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
       const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
       const json = await res.json();
       if (json.success) {
-        setLeads((prev) => prev.filter((l) => l.id !== lead.id));
+        setLeads((p) => p.filter((l) => l.id !== lead.id));
         if (activeLead?.id === lead.id) onSelectLead?.(null);
       }
-    } catch {
-      console.error("Failed to delete lead");
-    } finally {
-      setDeletingId(null);
-    }
+    } catch { console.error("Failed to delete lead"); }
+    finally { setDeletingId(null); }
   };
 
   const filtered = leads.filter((l) =>
     l.householdName.toLowerCase().includes(search.toLowerCase())
   );
 
+  // ── styles ────────────────────────────────────────────────────────────────
+  const S = {
+    sidebar: {
+      width: 300,
+      display: "flex",
+      flexDirection: "column" as const,
+      height: "100vh",
+      background: "#fff",
+      borderRight: "1px solid rgba(0,0,0,0.06)",
+      fontFamily: "'DM Sans', sans-serif",
+      flexShrink: 0,
+    },
+
+    // ── top header ──
+    header: {
+      padding: "18px 16px 14px",
+      borderBottom: "1px solid rgba(0,0,0,0.05)",
+    },
+    crmLink: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 5,
+      fontSize: 10,
+      fontWeight: 500,
+      letterSpacing: "0.18em",
+      textTransform: "uppercase" as const,
+      color: "#059669",
+      textDecoration: "none",
+      marginBottom: 14,
+      padding: "4px 10px",
+      background: "rgba(5,150,105,0.07)",
+      borderRadius: 999,
+    },
+    headerRow: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    userInfo: { display: "flex", alignItems: "center", gap: 10 },
+    userName: {
+      fontSize: 13,
+      fontWeight: 500,
+      color: "#0c1a12",
+      lineHeight: 1.3,
+    },
+    userRole: { fontSize: 11, color: "#94a3b8", fontWeight: 300 },
+    plusBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 999,
+      background: "#0c1a12",
+      border: "none",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "transform 0.15s, background 0.15s",
+      flexShrink: 0,
+    },
+
+    // ── search ──
+    searchWrap: {
+      padding: "10px 14px",
+      borderBottom: "1px solid rgba(0,0,0,0.04)",
+    },
+    searchInner: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      background: "#f8faf9",
+      borderRadius: 12,
+      padding: "8px 12px",
+      border: "1px solid rgba(0,0,0,0.05)",
+    },
+    searchInput: {
+      background: "transparent",
+      border: "none",
+      outline: "none",
+      fontSize: 13,
+      fontWeight: 300,
+      color: "#0c1a12",
+      width: "100%",
+      fontFamily: "'DM Sans', sans-serif",
+    },
+
+    // ── list ──
+    list: { flex: 1, overflowY: "auto" as const },
+
+    // ── bottom ──
+    bottom: {
+      padding: "14px 16px",
+      borderTop: "1px solid rgba(0,0,0,0.05)",
+      textAlign: "center" as const,
+    },
+    brand: {
+      fontFamily: "'Instrument Serif', serif",
+      fontSize: 13,
+      color: "#cbd5e1",
+      letterSpacing: "-0.01em",
+    },
+    brandAccent: { color: "#059669" },
+
+    // ── modal backdrop ──
+    backdrop: {
+      position: "fixed" as const,
+      inset: 0,
+      zIndex: 50,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    backdropOverlay: {
+      position: "absolute" as const,
+      inset: 0,
+      background: "rgba(12,26,18,0.45)",
+      backdropFilter: "blur(6px)",
+    },
+    modal: {
+      position: "relative" as const,
+      background: "#fff",
+      borderRadius: 24,
+      boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
+      width: "100%",
+      maxWidth: 400,
+      margin: "0 16px",
+      padding: "32px 28px 28px",
+      border: "1px solid rgba(0,0,0,0.06)",
+    },
+  };
+
   return (
     <>
-      <div className="w-80 flex flex-col border-r border-slate-200 bg-white">
-        {/* Header */}
-        <Link href="/crm">CRM</Link>
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UserButton afterSignOutUrl="/" />
-            <div>
-              <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-              <p className="text-xs text-slate-400">Agent</p>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+        .lead-row { transition: background 0.12s; }
+        .lead-row:hover { background: #f8faf9; }
+        .lead-row.active { background: rgba(5,150,105,0.07); border-left: 2px solid #059669; }
+        .menu-btn { opacity: 0; transition: opacity 0.15s; }
+        .lead-row:hover .menu-btn { opacity: 1; }
+        .plus-btn:hover { background: #059669 !important; transform: translateY(-1px); }
+        .modal-input:focus { outline: none; border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,0.12); }
+        .submit-btn:hover:not(:disabled) { background: #047857 !important; transform: translateY(-1px); }
+        .crm-link:hover { background: rgba(5,150,105,0.12) !important; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 99px; }
+      `}</style>
+
+      <div style={S.sidebar}>
+
+        {/* ── Header ── */}
+        <div style={S.header}>
+          <Link href="/crm" style={S.crmLink} className="crm-link">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            </svg>
+            CRM
+          </Link>
+
+          <div style={S.headerRow}>
+            <div style={S.userInfo}>
+              <UserButton afterSignOutUrl="/" />
+              <div>
+                <p style={S.userName}>{user.name}</p>
+                <p style={S.userRole}>Agent</p>
+              </div>
             </div>
+            <button
+              style={S.plusBtn}
+              className="plus-btn"
+              onClick={() => setShowModal(true)}
+              title="New household"
+            >
+              <Plus size={15} color="#fff" strokeWidth={2.5} />
+            </button>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-8 h-8 bg-emerald-600 hover:bg-emerald-700 rounded-full flex items-center justify-center transition-colors"
-          >
-            <Plus className="w-4 h-4 text-white" />
-          </button>
         </div>
 
-        {/* Search */}
-        <div className="p-3 border-b border-slate-100">
-          <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-            <Search className="w-4 h-4 text-slate-400" />
+        {/* ── Search ── */}
+        <div style={S.searchWrap}>
+          <div style={S.searchInner}>
+            <Search size={14} color="#94a3b8" />
             <input
               type="text"
-              placeholder="Search households..."
+              placeholder="Search households…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none w-full"
+              style={S.searchInput}
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}
+              >
+                <X size={12} color="#94a3b8" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Lead list */}
-        <div className="flex-1 overflow-y-auto">
+        {/* ── Lead list ── */}
+        <div style={S.list}>
           {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 120 }}>
+              <Loader2 size={18} color="#059669" className="animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center p-6">
-              <MessageSquare className="w-8 h-8 text-slate-200 mb-3" />
-              <p className="text-sm text-slate-400">No households yet</p>
-              <p className="text-xs text-slate-300 mt-1">Click + to add one</p>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center",
+              justifyContent: "center", padding: "40px 24px", gap: 8, textAlign: "center",
+            }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: "rgba(5,150,105,0.07)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <MessageSquare size={18} color="#059669" />
+              </div>
+              <p style={{ fontSize: 13, fontWeight: 500, color: "#0c1a12", marginTop: 4 }}>
+                No households yet
+              </p>
+              <p style={{ fontSize: 12, fontWeight: 300, color: "#94a3b8" }}>
+                Tap + to add one
+              </p>
             </div>
           ) : (
             filtered.map((lead) => (
               <div
                 key={lead.id}
-                className={`relative flex items-start group border-b border-slate-50 ${
-                  activeLead?.id === lead.id ? "bg-emerald-50 border-l-2 border-l-emerald-600" : "hover:bg-slate-50"
-                }`}
+                className={`lead-row${activeLead?.id === lead.id ? " active" : ""}`}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  borderBottom: "1px solid rgba(0,0,0,0.03)",
+                  paddingLeft: activeLead?.id === lead.id ? 0 : 2,
+                }}
               >
-                {/* Lead button */}
                 <button
                   onClick={() => onSelectLead?.(lead)}
-                  className="flex-1 p-4 flex items-start gap-3 text-left min-w-0"
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 11,
+                    padding: "11px 14px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    minWidth: 0,
+                  }}
                 >
-                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                    {deletingId === lead.id ? (
-                      <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
-                    ) : (
-                      <span className="text-emerald-700 font-semibold text-sm">
-                        {lead.householdName[0]}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
+                  {deletingId === lead.id ? (
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: "#f8faf9",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <Loader2 size={14} color="#059669" className="animate-spin" />
+                    </div>
+                  ) : (
+                    <Avatar name={lead.householdName} />
+                  )}
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                      <p style={{
+                        fontSize: 13, fontWeight: 500, color: "#0c1a12",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
                         {lead.householdName}
                       </p>
-                      <p className="text-xs text-slate-400 shrink-0 ml-2">{lead.time}</p>
+                      <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 300, flexShrink: 0, marginLeft: 8 }}>
+                        {lead.time}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-400 truncate">{lead.lastMessage}</p>
+                    <p style={{
+                      fontSize: 11, fontWeight: 300, color: "#94a3b8",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {lead.lastMessage}
+                    </p>
                   </div>
+
+                  {lead.unread > 0 && (
+                    <span style={{
+                      width: 18, height: 18, borderRadius: 99,
+                      background: "#059669", color: "#fff",
+                      fontSize: 10, fontWeight: 500,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      {lead.unread}
+                    </span>
+                  )}
                 </button>
 
                 {/* 3-dot menu */}
-                <div className="relative flex items-center pr-2 pt-4" ref={menuOpenId === lead.id ? menuRef : null}>
+                <div
+                  style={{ position: "relative", paddingRight: 10 }}
+                  ref={menuOpenId === lead.id ? menuRef : null}
+                >
                   <button
+                    className="menu-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       setMenuOpenId(menuOpenId === lead.id ? null : lead.id);
                     }}
-                    className="w-6 h-6 rounded-full hover:bg-slate-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      width: 26, height: 26, borderRadius: 8,
+                      background: "none", border: "1px solid rgba(0,0,0,0.07)",
+                      cursor: "pointer", display: "flex",
+                      alignItems: "center", justifyContent: "center",
+                    }}
                   >
-                    <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
+                    <MoreVertical size={13} color="#94a3b8" />
                   </button>
 
                   {menuOpenId === lead.id && (
-                    <div className="absolute right-0 top-8 z-20 bg-white border border-slate-100 rounded-xl shadow-lg py-1 w-36">
+                    <div style={{
+                      position: "absolute", right: 0, top: 32, zIndex: 20,
+                      background: "#fff", border: "1px solid rgba(0,0,0,0.07)",
+                      borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+                      padding: "4px 0", width: 148, overflow: "hidden",
+                    }}>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(lead);
+                        onClick={(e) => { e.stopPropagation(); handleDelete(lead); }}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center",
+                          gap: 8, padding: "9px 14px", background: "none",
+                          border: "none", cursor: "pointer",
+                          fontSize: 13, color: "#ef4444", fontWeight: 400,
+                          fontFamily: "'DM Sans', sans-serif",
+                          transition: "background 0.1s",
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#fef2f2")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
+                        <Trash2 size={13} />
+                        Delete household
                       </button>
                     </div>
                   )}
@@ -232,30 +488,70 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
           )}
         </div>
 
-        {/* Bottom branding */}
-        <div className="p-4 border-t border-slate-100">
-          <p className="text-xs text-slate-300 text-center">
-            Sure<span className="text-emerald-400">Im</span> · Agent Platform
+        {/* ── Branding ── */}
+        <div style={S.bottom}>
+          <p style={S.brand}>
+            Sure<span style={S.brandAccent}>LM</span>
+            <span style={{ color: "#e2e8f0", margin: "0 6px" }}>·</span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, fontWeight: 300, color: "#cbd5e1", letterSpacing: "0.05em" }}>
+              Agent Platform
+            </span>
           </p>
         </div>
       </div>
 
-      {/* New Conversation Modal */}
+      {/* ── Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+        <div style={S.backdrop}>
+          <div style={S.backdropOverlay} onClick={() => setShowModal(false)} />
+          <div style={S.modal}>
+            {/* Close */}
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
+              style={{
+                position: "absolute", top: 16, right: 16,
+                width: 30, height: 30, borderRadius: 99,
+                background: "#f8faf9", border: "1px solid rgba(0,0,0,0.07)",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              }}
             >
-              <X className="w-4 h-4 text-slate-500" />
+              <X size={14} color="#64748b" />
             </button>
-            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-              <Plus className="w-5 h-5 text-emerald-600" />
+
+            {/* Icon */}
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: "#0c1a12",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              marginBottom: 20,
+            }}>
+              <Plus size={20} color="#4ade80" />
             </div>
-            <h2 className="text-base font-semibold text-slate-900 mb-1">New Household</h2>
-            <p className="text-sm text-slate-400 mb-5">Enter the household name to start a new conversation.</p>
+
+            {/* Heading */}
+            <p style={{
+              fontSize: 10, fontWeight: 500, letterSpacing: "0.2em",
+              textTransform: "uppercase", color: "#059669", marginBottom: 6,
+            }}>
+              New Household
+            </p>
+            <h2 style={{
+              fontFamily: "'Instrument Serif', serif",
+              fontWeight: 400, fontSize: 28,
+              letterSpacing: "-0.02em", color: "#0c1a12",
+              marginBottom: 4,
+            }}>
+              Start a conversation
+            </h2>
+            <p style={{
+              fontSize: 14, fontWeight: 300, color: "#94a3b8",
+              lineHeight: 1.6, marginBottom: 24,
+              fontStyle: "italic",
+              fontFamily: "'Instrument Serif', serif",
+            }}>
+              enter the household name below
+            </p>
+
             <input
               type="text"
               autoFocus
@@ -263,14 +559,46 @@ export default function Sidebar({ user, onSelectLead, activeLead }: SidebarProps
               value={householdName}
               onChange={(e) => setHouseholdName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              className="modal-input"
+              style={{
+                width: "100%",
+                background: "#f8faf9",
+                border: "1px solid rgba(0,0,0,0.08)",
+                borderRadius: 14,
+                padding: "13px 16px",
+                fontSize: 14,
+                fontWeight: 400,
+                color: "#0c1a12",
+                fontFamily: "'DM Sans', sans-serif",
+                marginBottom: 14,
+                transition: "border-color 0.2s, box-shadow 0.2s",
+                boxSizing: "border-box",
+              }}
             />
+
             <button
               onClick={handleCreate}
               disabled={!householdName.trim() || creating}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+              className="submit-btn"
+              style={{
+                width: "100%",
+                background: householdName.trim() && !creating ? "#059669" : "#e2e8f0",
+                color: householdName.trim() && !creating ? "#fff" : "#94a3b8",
+                border: "none",
+                borderRadius: 999,
+                padding: "13px 26px",
+                fontSize: 15,
+                fontWeight: 500,
+                fontFamily: "'DM Sans', sans-serif",
+                cursor: householdName.trim() && !creating ? "pointer" : "default",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                transition: "background 0.15s, transform 0.15s",
+              }}
             >
-              {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+              {creating && <Loader2 size={15} className="animate-spin" />}
               Start Conversation
             </button>
           </div>
