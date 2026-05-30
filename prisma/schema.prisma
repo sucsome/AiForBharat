@@ -6,121 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id            String   @id @default(cuid())
-  clerkId       String   @unique
-  email         String   @unique
-  name          String
-  avatar        String?
-  role          Role     @default(AGENT)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  agentProfile  AgentProfile?
-  leads         PolicyLead[]
-}
-
-model AgentProfile {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bankCustomerId String?
-  location       String?
-  language       String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
-model PolicyLead {
-  id            String           @id @default(cuid())
-  agentId       String
-  agent         User             @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  householdName String
-  phone         String?
-  income        Int?
-  familySize    Int?
-  messages      Message[]
-  status        LeadStatus       @default(NEW)
-  notes         String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  dateOfBirth   DateTime?
-  followUpAt    DateTime?
-  reminders     Reminder[]
-  birthdayReminders BirthdayReminder[]
-  issuances     PolicyIssuance[]
-
-  // Indexes
-  @@unique([agentId, phone])
-
-  @@index([agentId, status, followUpAt])
-  @@index([status])
-  @@index([followUpAt])
-  @@index([agentId, createdAt])
-}
-
-model PolicyIssuance {
-  id             String          @id @default(cuid())
-  leadId         String
-  lead           PolicyLead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  policyName     String
-  policyProvider String?
-  premiumAmount  Int?
-  issuedAt       DateTime        @default(now())
-  expiresAt      DateTime?
-  status         IssuanceStatus  @default(ACTIVE)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  nextPremiumDue DateTime?
-
-  // Indexes
-  @@index([leadId])
-}
-
-model Message {
-  id        String      @id @default(cuid())
-  leadId    String
-  lead      PolicyLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  role      MessageRole
-  content   String
-  policies  Json?
-  createdAt DateTime    @default(now())
-
-  // Indexes
-  @@index([leadId, createdAt])
-}
-
-model Reminder {
-  id          String       @id @default(cuid())
-  leadId      String
-  lead        PolicyLead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  type        ReminderType
-  scheduledAt DateTime
-  note        String?
-  isDone      Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-
-  // Indexes
-  @@index([leadId])
-  @@index([scheduledAt])
-}
-
-model BirthdayReminder {
-  id            String     @id @default(cuid())
-  leadId        String
-  lead          PolicyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  name          String
-  phone         String?
-  dateOfBirth   DateTime
-  daysUntil     Int
-  isToday       Boolean    @default(false)
-  wishSent      Boolean    @default(false)
-  refreshedAt   DateTime   @default(now())
-
-  // Indexes
-  @@index([leadId])
-}
+// ── Enums ─────────────────────────────────────────────────────────────────
 
 enum ReminderType {
   FOLLOWUP
@@ -148,4 +34,200 @@ enum IssuanceStatus {
   ACTIVE
   EXPIRED
   CLAIMED
+}
+
+enum PolicyCategory {
+  LIFE
+  HEALTH
+  CROP
+  ACCIDENT
+  OTHER
+}
+
+enum TransactionType {
+  PREMIUM
+  REFUND
+  REVERSAL
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  OTHER
+}
+
+// ── Models ────────────────────────────────────────────────────────────────
+
+model User {
+  id           String        @id @default(cuid())
+  clerkId      String        @unique
+  email        String        @unique
+  name         String
+  avatar       String?
+  role         Role          @default(AGENT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  agentProfile AgentProfile?
+  leads        PolicyLead[]
+  transactions Transaction[]
+}
+
+model AgentProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  bankCustomerId String?
+  location       String?
+  language       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Reference table — stores standard rates per category
+// Used only for display in the UI ("standard rate for LIFE is 35%")
+// Actual commission earned is stored directly on Transaction.commissionAmount
+model CommissionRate {
+  id          String         @id @default(cuid())
+  category    PolicyCategory @unique
+  year1Rate   Float
+  renewalRate Float
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PolicyLead {
+  id            String     @id @default(cuid())
+  agentId       String
+  householdName String
+  phone         String?
+  income        Int?
+  familySize    Int?
+  status        LeadStatus @default(NEW)
+  notes         String?
+  dateOfBirth   DateTime?
+  followUpAt    DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  agent             User               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  reminders         Reminder[]
+  birthdayReminders BirthdayReminder[]
+  issuances         PolicyIssuance[]
+  transactions      Transaction[]
+
+  @@unique([agentId, phone])
+  @@index([agentId, status, followUpAt])
+  @@index([status])
+  @@index([followUpAt])
+  @@index([agentId, createdAt])
+}
+
+model PolicyIssuance {
+  id             String         @id @default(cuid())
+  leadId         String
+  policyName     String
+  policyProvider String?
+  category       PolicyCategory @default(OTHER)
+  premiumAmount  Int?
+  issuedAt       DateTime       @default(now())
+  expiresAt      DateTime?
+  status         IssuanceStatus @default(ACTIVE)
+  isYear1        Boolean        @default(true)
+  nextPremiumDue DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  lead         PolicyLead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([leadId])
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  leadId        String
+  issuanceId    String
+  agentId       String
+
+  type          TransactionType   @default(PREMIUM)
+  status        TransactionStatus @default(COMPLETED)
+  paymentMethod PaymentMethod     @default(CASH)
+
+  amount           Int      // premium collected in ₹
+  commissionAmount Int      // commission earned — entered directly, no calculation
+  tdsAmount        Int      @default(0)   // TDS deducted if any, 0 until bank integration
+  netCommission    Int      // commissionAmount - tdsAmount — what agent actually receives
+
+  referenceNumber  String?  // UPI transaction ID, bank ref, etc.
+  premiumPeriod    String?  // e.g. "2025-03" — month this payment covers
+  notes            String?
+
+  collectedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead     PolicyLead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  issuance PolicyIssuance @relation(fields: [issuanceId], references: [id], onDelete: Cascade)
+  agent    User           @relation(fields: [agentId], references: [id])
+
+  @@index([agentId, collectedAt])
+  @@index([agentId, status])
+  @@index([leadId])
+  @@index([issuanceId])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  leadId    String
+  role      MessageRole
+  content   String
+  policies  Json?
+  createdAt DateTime    @default(now())
+
+  lead PolicyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+}
+
+model Reminder {
+  id          String       @id @default(cuid())
+  leadId      String
+  type        ReminderType
+  scheduledAt DateTime
+  note        String?
+  isDone      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  lead PolicyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([scheduledAt])
+}
+
+model BirthdayReminder {
+  id          String     @id @default(cuid())
+  leadId      String
+  name        String
+  phone       String?
+  dateOfBirth DateTime
+  daysUntil   Int
+  isToday     Boolean    @default(false)
+  wishSent    Boolean    @default(false)
+  refreshedAt DateTime   @default(now())
+
+  lead PolicyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
 }
